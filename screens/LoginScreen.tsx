@@ -1,255 +1,324 @@
 "use client"
 
-import { useState } from "react"
-import {
-  StyleSheet,
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Alert,
-} from "react-native"
-import { SafeAreaView } from "react-native-safe-area-context"
-import { signInWithEmailAndPassword } from "firebase/auth"
-import { auth } from "../firebase/config"
-import { Eye, EyeOff, Mail, Lock } from "lucide-react-native"
+import React, { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '../contexts/AuthContext';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import NetInfo from '@react-native-community/netinfo';
+import { checkConnectivity } from '../firebase/config';
 
-export default function LoginScreen({ navigation }) {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [errors, setErrors] = useState({ email: "", password: "" })
+type RootStackParamList = {
+  Login: undefined;
+  Home: undefined;
+  LogMood: undefined;
+  History: undefined;
+};
 
-  const validateForm = () => {
-    let valid = true
-    const newErrors = { email: "", password: "" }
+type LoginScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
-    // Email validation
-    if (!email.trim()) {
-      newErrors.email = "Email is required"
-      valid = false
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
-      newErrors.email = "Email is invalid"
-      valid = false
+interface LoginScreenProps {
+  navigation: LoginScreenNavigationProp;
+}
+
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 2000;
+
+export default function LoginScreen({ navigation }: LoginScreenProps) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingConnection, setIsCheckingConnection] = useState(true);
+  const [isFirebaseConnected, setIsFirebaseConnected] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const { signIn, signUp } = useAuth();
+
+  const checkFirebaseConnection = useCallback(async () => {
+    try {
+      setIsCheckingConnection(true);
+      const connected = await checkConnectivity();
+      setIsFirebaseConnected(connected);
+      setRetryCount(0);
+    } catch (error: any) {
+      console.error('Error checking Firebase connection:', error);
+      setIsFirebaseConnected(false);
+      
+      if (retryCount < MAX_RETRIES) {
+        const delay = RETRY_DELAY * Math.pow(2, retryCount);
+        setTimeout(() => {
+          setRetryCount(prev => prev + 1);
+          checkFirebaseConnection();
+        }, delay);
+      } else {
+        Alert.alert(
+          'Connection Error',
+          error.message || 'Failed to connect to Firebase. Would you like to try again or proceed offline?',
+          [
+            { 
+              text: 'Try Again', 
+              onPress: () => {
+                setRetryCount(0);
+                checkFirebaseConnection();
+              }
+            },
+            { 
+              text: 'Proceed Offline', 
+              onPress: () => {
+                setIsFirebaseConnected(true);
+                setIsCheckingConnection(false);
+              }
+            },
+            { 
+              text: 'Cancel', 
+              style: 'cancel' 
+            }
+          ]
+        );
+      }
+    } finally {
+      setIsCheckingConnection(false);
     }
+  }, [retryCount]);
 
-    // Password validation
-    if (!password) {
-      newErrors.password = "Password is required"
-      valid = false
-    } else if (password.length < 6) {
-      newErrors.password = "Password must be at least 6 characters"
-      valid = false
-    }
-
-    setErrors(newErrors)
-    return valid
-  }
+  useEffect(() => {
+    checkFirebaseConnection();
+  }, [checkFirebaseConnection]);
 
   const handleLogin = async () => {
-    if (!validateForm()) return
+    if (!isFirebaseConnected) {
+      Alert.alert(
+        'Connection Error',
+        'Please check your internet connection and try again.',
+        [
+          { 
+            text: 'Check Connection', 
+            onPress: () => {
+              setRetryCount(0);
+              checkFirebaseConnection();
+            }
+          },
+          { 
+            text: 'Proceed Offline', 
+            onPress: () => {
+              setIsFirebaseConnected(true);
+              handleLogin();
+            }
+          },
+          { 
+            text: 'Cancel', 
+            style: 'cancel' 
+          }
+        ]
+      );
+      return;
+    }
+
+    if (!email || !password) {
+      Alert.alert('Error', 'Please enter both email and password');
+      return;
+    }
 
     try {
-      setLoading(true)
-      await signInWithEmailAndPassword(auth, email, password)
-      // Navigation will be handled by the auth state listener in AuthProvider
-    } catch (error) {
-      console.error("Login error:", error)
-
-      let errorMessage = "Failed to sign in. Please try again."
-      if (error.code === "auth/user-not-found" || error.code === "auth/wrong-password") {
-        errorMessage = "Invalid email or password"
-      } else if (error.code === "auth/too-many-requests") {
-        errorMessage = "Too many failed login attempts. Please try again later."
+      setIsLoading(true);
+      await signIn(email, password);
+    } catch (error: any) {
+      let errorMessage = 'An error occurred during login';
+      
+      if (error.code === 'auth/network-request-failed') {
+        errorMessage = 'Network error. Please check your internet connection.';
+        await checkFirebaseConnection();
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address.';
+      } else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        errorMessage = 'Invalid email or password.';
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = 'Too many failed attempts. Please try again later.';
       }
-
-      Alert.alert("Login Failed", errorMessage)
+      
+      Alert.alert('Error', errorMessage);
     } finally {
-      setLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
+
+  const handleSignUp = async () => {
+    if (!isFirebaseConnected) {
+      Alert.alert(
+        'Connection Error',
+        'Please check your internet connection and try again.',
+        [
+          { 
+            text: 'Check Connection', 
+            onPress: () => {
+              setRetryCount(0);
+              checkFirebaseConnection();
+            }
+          },
+          { 
+            text: 'Cancel', 
+            style: 'cancel' 
+          }
+        ]
+      );
+      return;
+    }
+
+    if (!email || !password) {
+      Alert.alert('Error', 'Please enter both email and password');
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters long');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      await signUp(email, password);
+    } catch (error: any) {
+      let errorMessage = 'An error occurred during sign up';
+      
+      if (error.code === 'auth/network-request-failed') {
+        errorMessage = 'Network error. Please check your internet connection.';
+        await checkFirebaseConnection();
+      } else if (error.code === 'auth/email-already-in-use') {
+        errorMessage = 'This email is already registered. Please try logging in.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address.';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = 'Password is too weak. Please use a stronger password.';
+      }
+      
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.keyboardAvoidingView}>
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Sign in to continue tracking your moods</Text>
+      <View style={styles.content}>
+        <Text style={styles.title}>Mood Diary</Text>
+        <Text style={styles.subtitle}>Track your emotions</Text>
+
+        {isCheckingConnection ? (
+          <View style={styles.connectionStatus}>
+            <ActivityIndicator size="large" color="#6200ee" />
+            <Text style={styles.connectionText}>
+              {retryCount > 0 
+                ? `Checking connection (Attempt ${retryCount + 1}/${MAX_RETRIES + 1})...`
+                : 'Checking connection...'}
+            </Text>
           </View>
+        ) : (
+          <>
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              editable={!isLoading}
+            />
 
-          <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <View style={styles.iconContainer}>
-                <Mail size={20} color="#666" />
-              </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                value={email}
-                onChangeText={(text) => {
-                  setEmail(text)
-                  if (errors.email) setErrors({ ...errors, email: "" })
-                }}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-              />
-            </View>
-            {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              editable={!isLoading}
+            />
 
-            <View style={styles.inputContainer}>
-              <View style={styles.iconContainer}>
-                <Lock size={20} color="#666" />
-              </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Password"
-                value={password}
-                onChangeText={(text) => {
-                  setPassword(text)
-                  if (errors.password) setErrors({ ...errors, password: "" })
-                }}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-              />
-              <TouchableOpacity style={styles.eyeIcon} onPress={() => setShowPassword(!showPassword)}>
-                {showPassword ? <EyeOff size={20} color="#666" /> : <Eye size={20} color="#666" />}
-              </TouchableOpacity>
-            </View>
-            {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
-
-            <TouchableOpacity style={styles.forgotPassword} onPress={() => navigation.navigate("ForgotPassword")}>
-              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.button, loading && styles.disabledButton]}
+            <TouchableOpacity 
+              style={[styles.button, isLoading && styles.disabledButton]} 
               onPress={handleLogin}
-              disabled={loading}
+              disabled={isLoading}
             >
-              {loading ? (
-                <ActivityIndicator color="#fff" size="small" />
+              {isLoading ? (
+                <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.buttonText}>Sign In</Text>
+                <Text style={styles.buttonText}>Login</Text>
               )}
             </TouchableOpacity>
-          </View>
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate("Signup")}>
-              <Text style={styles.signupText}>Sign Up</Text>
+            <TouchableOpacity 
+              style={[styles.button, styles.signUpButton, isLoading && styles.disabledButton]} 
+              onPress={handleSignUp}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>Sign Up</Text>
+              )}
             </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          </>
+        )}
+      </View>
     </SafeAreaView>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: '#f8f9fa',
   },
-  keyboardAvoidingView: {
+  content: {
     flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
     padding: 20,
-    justifyContent: "center",
-  },
-  header: {
-    alignItems: "center",
-    marginBottom: 40,
+    justifyContent: 'center',
   },
   title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#333",
+    fontSize: 32,
+    fontWeight: 'bold',
+    textAlign: 'center',
     marginBottom: 10,
+    color: '#333',
   },
   subtitle: {
-    fontSize: 16,
-    color: "#666",
-    textAlign: "center",
+    fontSize: 18,
+    textAlign: 'center',
+    marginBottom: 40,
+    color: '#666',
   },
-  form: {
-    width: "100%",
-  },
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#ddd",
-  },
-  iconContainer: {
-    padding: 12,
-    borderRightWidth: 1,
-    borderRightColor: "#eee",
-  },
-  input: {
-    flex: 1,
-    height: 50,
-    paddingHorizontal: 12,
-    fontSize: 16,
-  },
-  eyeIcon: {
-    padding: 12,
-  },
-  errorText: {
-    color: "#b00020",
-    fontSize: 14,
-    marginTop: -8,
-    marginBottom: 12,
-    marginLeft: 4,
-  },
-  forgotPassword: {
-    alignSelf: "flex-end",
+  connectionStatus: {
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 20,
   },
-  forgotPasswordText: {
-    color: "#6200ee",
-    fontSize: 14,
+  connectionText: {
+    marginTop: 10,
+    color: '#666',
+    fontSize: 16,
+  },
+  input: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#ddd',
   },
   button: {
-    backgroundColor: "#6200ee",
-    height: 50,
+    backgroundColor: '#6200ee',
+    padding: 15,
     borderRadius: 10,
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 10,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  signUpButton: {
+    backgroundColor: '#03dac6',
   },
   disabledButton: {
-    backgroundColor: "#b39ddb",
+    opacity: 0.7,
   },
   buttonText: {
-    color: "#fff",
+    color: 'white',
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: 'bold',
   },
-  footer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginTop: 30,
-  },
-  footerText: {
-    color: "#666",
-    fontSize: 16,
-  },
-  signupText: {
-    color: "#6200ee",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-})
+});
