@@ -1,6 +1,1 @@
 # MoodDiaryApp
-Use v0.dev to create initial structure app
-prompt: "Help me create the basic structure of a Mood Diary mobile app using React Native and Expo. The app should have three screens: a Home screen with buttons to log today's mood or view mood history, a Log Mood screen where users can select a mood (like happy, sad, angry) and write a short note, and a History screen that shows past mood entries in a list. I want to connect it to Firebase Firestore to save and fetch the mood data. Suggest a simple folder structure and basic navigation flow for this app.", "Create login and signup screens for user authentication"
-
-v1.0.0: initial code structure
-v1.0.2: fixed auth and save mood in firestore firebase
