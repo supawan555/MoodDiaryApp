@@ -1,5 +1,6 @@
 # MoodDiaryApp
 🧩 Features
+
  Monthly calendar with daily mood indicators
 
  Add mood and note entries per day
