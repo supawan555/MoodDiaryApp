@@ -24,29 +24,79 @@ const HomeScreen = ({ navigation }) => {
   // Get all dates that have notes
   const markedDates = {};
   Object.keys(notes).forEach(date => {
-    markedDates[date] = { marked: true, dotColor: '#50cebb' };
+    markedDates[date] = { 
+      marked: true,
+      dotColor: '#50cebb',
+      customStyles: {
+        container: {
+          backgroundColor: 'transparent',
+          justifyContent: 'center',
+          alignItems: 'center',
+        },
+        text: {
+          color: '#2d4150',
+          fontSize: 12,
+        }
+      }
+    };
   });
   
   // Add selected date marker
   markedDates[selectedDate] = { 
     ...markedDates[selectedDate],
     selected: true, 
-    selectedColor: '#50cebb' 
+    selectedColor: '#50cebb',
+    customStyles: {
+      container: {
+        backgroundColor: '#50cebb',
+        borderRadius: 20,
+      },
+      text: {
+        color: 'white',
+      }
+    }
   };
 
   // Get notes for the selected date
-  const selectedDateNote = notes[selectedDate] || '';
+  const selectedDateNote = notes[selectedDate] || { text: '', mood: null };
   
   // Create a preview of the note (first 100 characters)
-  const notePreview = selectedDateNote.length > 100 
-    ? `${selectedDateNote.substring(0, 100)}...` 
-    : selectedDateNote;
+  const notePreview = selectedDateNote.text.length > 100 
+    ? `${selectedDateNote.text.substring(0, 100)}...` 
+    : selectedDateNote.text;
+
+  // Custom day component to show mood emoji
+  const renderDay = ({ date, state, onPress }) => {
+    const dateString = date.dateString;
+    const note = notes[dateString];
+    const isSelected = dateString === selectedDate;
+    
+    return (
+      <TouchableOpacity
+        onPress={() => onPress(date)}
+        style={[
+          styles.dayContainer,
+          isSelected && styles.selectedDayContainer
+        ]}
+      >
+        <Text style={[
+          styles.dayText,
+          note?.mood && styles.emojiText,
+          isSelected && styles.selectedDayText,
+          state === 'disabled' && styles.disabledDayText
+        ]}>
+          {note?.mood ? note.mood : date.day}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <Calendar
         onDayPress={day => setSelectedDate(day.dateString)}
         markedDates={markedDates}
+        dayComponent={renderDay}
         theme={{
           calendarBackground: '#ffffff',
           textSectionTitleColor: '#b6c1cd',
@@ -64,14 +114,27 @@ const HomeScreen = ({ navigation }) => {
       />
       
       <View style={styles.noteContainer}>
-        <Text style={styles.dateHeader}>{formatDate(selectedDate)}</Text>
+        <View style={styles.headerContainer}>
+          <Text style={styles.dateHeader}>{formatDate(selectedDate)}</Text>
+          <TouchableOpacity
+            style={styles.analysisButton}
+            onPress={() => navigation.navigate('Analysis', { selectedDate })}
+          >
+            <Ionicons name="bar-chart-outline" size={24} color="white" />
+          </TouchableOpacity>
+        </View>
         
-        {selectedDateNote ? (
+        {selectedDateNote.text ? (
           <TouchableOpacity
             style={styles.notePreview}
             onPress={() => navigation.navigate('Note', { date: selectedDate, title: formatDate(selectedDate) })}
           >
-            <Text style={styles.noteText}>{notePreview}</Text>
+            <View style={styles.noteHeader}>
+              {selectedDateNote.mood && (
+                <Text style={styles.moodEmoji}>{selectedDateNote.mood}</Text>
+              )}
+              <Text style={styles.noteText}>{notePreview}</Text>
+            </View>
           </TouchableOpacity>
         ) : (
           <View style={styles.emptyNote}>
@@ -84,7 +147,7 @@ const HomeScreen = ({ navigation }) => {
         style={styles.fab}
         onPress={() => navigation.navigate('Note', { date: selectedDate, title: formatDate(selectedDate) })}
       >
-        <Ionicons name={selectedDateNote ? "create-outline" : "add"} size={24} color="white" />
+        <Ionicons name={selectedDateNote.text ? "create-outline" : "add"} size={24} color="white" />
       </TouchableOpacity>
     </SafeAreaView>
   );
@@ -152,6 +215,58 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 3,
+  },
+  noteHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  moodEmoji: {
+    fontSize: 24,
+    marginRight: 10,
+  },
+  dayContainer: {
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    margin: 1,
+  },
+  selectedDayContainer: {
+    backgroundColor: '#50cebb',
+    borderRadius: 16,
+  },
+  dayText: {
+    fontSize: 16,
+    color: '#2d4150',
+  },
+  emojiText: {
+    fontSize: 20,
+  },
+  selectedDayText: {
+    color: 'white',
+  },
+  disabledDayText: {
+    color: '#d9e1e8',
+  },
+  headerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  analysisButton: {
+    backgroundColor: '#50cebb',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
   },
 });
 

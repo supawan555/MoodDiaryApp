@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import HomeScreen from './screens/HomeScreen';
 import NoteScreen from './screens/NoteScreen';
+import AnalysisScreen from './screens/AnalysisScreen';
 
 // Create a context for notes data
 export const NotesContext = React.createContext();
@@ -50,10 +51,10 @@ export default function App() {
   }, [notes, isLoading]);
 
   // Function to add or update a note
-  const saveNote = (date, noteText) => {
+  const saveNote = (date, noteData) => {
     setNotes(prevNotes => ({
       ...prevNotes,
-      [date]: noteText
+      [date]: noteData
     }));
   };
 
@@ -83,6 +84,11 @@ export default function App() {
             name="Note" 
             component={NoteScreen} 
             options={({ route }) => ({ title: route.params?.title || 'Note' })} 
+          />
+          <Stack.Screen 
+            name="Analysis" 
+            component={AnalysisScreen} 
+            options={{ title: 'Mood Analysis' }} 
           />
         </Stack.Navigator>
         <StatusBar style="auto" />
