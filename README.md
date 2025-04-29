@@ -6,14 +6,17 @@ A mobile application for tracking daily moods and emotions.
 
 ### Home Screen
 ![Home](assets/screenshots/HomeScreen.png)
+
 *Monthly calendar view showing mood entries across different days*
 
 ### Calendar View
 ![Note](assets/screenshots/NoteScreen.png)
+
 *Daily mood entry screen where users can select their current mood and add notes*
 
 ### Analysis Screen
 ![Analysis](assets/screenshots/AnalysisScreen.png)
+
 *Monthly mood analysis showing distribution of different moods*
 
 ## Features
@@ -26,4 +29,4 @@ A mobile application for tracking daily moods and emotions.
 - React Native 0.71.14
 - Expo SDK 48.0.18
 - JavaScript (ES6+)
-- Android Studio (สำหรับ emulator และ debug)
+- Android Studio (for emulator and debug)
